@@ -1,0 +1,32 @@
+From 736667bf08b03fdca824e88b901c2dbdd6703a0c Mon Sep 17 00:00:00 2001
+From: Archana Obannagari <aobann@codeaurora.org>
+Date: Fri, 8 Sep 2017 20:35:28 +0530
+Subject: msm: kgsl: Fixing an uninitialized variable in _gpuobj_map_useraddr()
+
+Uninitalized kernel variable passes to userspace, it may have data
+from stack. To avoid data leak from kernel to userspace initializes
+struct kgsl_gpuobj_import_useraddr to zero.
+
+CRs-Fixed: 2096006
+Change-Id: Ib79b030cd5e3edd7279632af20dc3fac95eb73d4
+Signed-off-by: Archana Obannagari <aobann@codeaurora.org>
+---
+ drivers/gpu/msm/kgsl.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/msm/kgsl.c b/drivers/gpu/msm/kgsl.c
+index dfd36ee..a7ea61c 100644
+--- a/drivers/gpu/msm/kgsl.c
++++ b/drivers/gpu/msm/kgsl.c
+@@ -2156,7 +2156,7 @@ static long _gpuobj_map_useraddr(struct kgsl_device *device,
+ 		struct kgsl_mem_entry *entry,
+ 		struct kgsl_gpuobj_import *param)
+ {
+-	struct kgsl_gpuobj_import_useraddr useraddr;
++	struct kgsl_gpuobj_import_useraddr useraddr = {0};
+ 	int ret;
+ 
+ 	param->flags &= KGSL_MEMFLAGS_GPUREADONLY
+-- 
+cgit v1.1
+

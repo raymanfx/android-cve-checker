@@ -1,0 +1,50 @@
+From ff11f44c0c10c94170f03a8698f73f7e08b74625 Mon Sep 17 00:00:00 2001
+From: Maulik Shah <mkshah@codeaurora.org>
+Date: Fri, 10 Nov 2017 11:51:01 +0530
+Subject: power: qcom: msm-core: Add mutex lock for ioctl
+
+There can be use after free with multiple ioctl calls.
+Add mutex lock when updating userspace power.
+
+Change-Id: Ieae08d05478a462b19cf7f91b64267177eaebe84
+Signed-off-by: Maulik Shah <mkshah@codeaurora.org>
+Signed-off-by: Mahesh Sivasubramanian <msivasub@codeaurora.org>
+---
+ drivers/power/qcom/msm-core.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/power/qcom/msm-core.c b/drivers/power/qcom/msm-core.c
+index 019f144..b72e118 100644
+--- a/drivers/power/qcom/msm-core.c
++++ b/drivers/power/qcom/msm-core.c
+@@ -407,9 +407,10 @@ static int update_userspace_power(struct sched_params __user *argp)
+ 	if (!sp)
+ 		return -ENOMEM;
+ 
+-
++	mutex_lock(&policy_update_mutex);
+ 	sp->power = allocate_2d_array_uint32_t(node->sp->num_of_freqs);
+ 	if (IS_ERR_OR_NULL(sp->power)) {
++		mutex_unlock(&policy_update_mutex);
+ 		ret = PTR_ERR(sp->power);
+ 		kfree(sp);
+ 		return ret;
+@@ -453,6 +454,7 @@ static int update_userspace_power(struct sched_params __user *argp)
+ 		}
+ 	}
+ 	spin_unlock(&update_lock);
++	mutex_unlock(&policy_update_mutex);
+ 
+ 	for_each_possible_cpu(cpu) {
+ 		if (!pdata_valid[cpu])
+@@ -466,6 +468,7 @@ static int update_userspace_power(struct sched_params __user *argp)
+ 	return 0;
+ 
+ failed:
++	mutex_unlock(&policy_update_mutex);
+ 	for (i = 0; i < TEMP_DATA_POINTS; i++)
+ 		kfree(sp->power[i]);
+ 	kfree(sp->power);
+-- 
+cgit v1.1
+

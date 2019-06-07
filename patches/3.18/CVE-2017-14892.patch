@@ -1,0 +1,75 @@
+From a3bed71777c133cfec78b5140877c6ba109961a0 Mon Sep 17 00:00:00 2001
+From: Aditya Bavanari <abavanar@codeaurora.org>
+Date: Mon, 11 Sep 2017 17:48:17 +0530
+Subject: ASoC: msm: qdsp6v2: Fix dangling pointer access
+
+Fix access of a dangling pointer by assigning it to NULL.
+
+CRs-Fixed: 2096407
+Change-Id: I22c1d55ea611ac59cdca51924787f6831bad8c2b
+Signed-off-by: Aditya Bavanari <abavanar@codeaurora.org>
+---
+ sound/soc/msm/qdsp6v2/q6asm.c | 22 +++++++++++-----------
+ 1 file changed, 11 insertions(+), 11 deletions(-)
+
+diff --git a/sound/soc/msm/qdsp6v2/q6asm.c b/sound/soc/msm/qdsp6v2/q6asm.c
+index 68246d97..e8019c8 100644
+--- a/sound/soc/msm/qdsp6v2/q6asm.c
++++ b/sound/soc/msm/qdsp6v2/q6asm.c
+@@ -2914,6 +2914,15 @@ int q6asm_set_shared_circ_buff(struct audio_client *ac,
+ 	int bytes_to_alloc, rc;
+ 	size_t len;
+ 
++	mutex_lock(&ac->cmd_lock);
++
++	if (ac->port[dir].buf) {
++		pr_err("%s: Buffer already allocated\n", __func__);
++		rc = -EINVAL;
++		mutex_unlock(&ac->cmd_lock);
++		goto done;
++	}
++
+ 	buf_circ = kzalloc(sizeof(struct audio_buffer), GFP_KERNEL);
+ 
+ 	if (!buf_circ) {
+@@ -2921,10 +2930,6 @@ int q6asm_set_shared_circ_buff(struct audio_client *ac,
+ 		goto done;
+ 	}
+ 
+-	mutex_lock(&ac->cmd_lock);
+-
+-	ac->port[dir].buf = buf_circ;
+-
+ 	bytes_to_alloc = bufsz * bufcnt;
+ 	bytes_to_alloc = PAGE_ALIGN(bytes_to_alloc);
+ 
+@@ -2936,11 +2941,12 @@ int q6asm_set_shared_circ_buff(struct audio_client *ac,
+ 	if (rc) {
+ 		pr_err("%s: Audio ION alloc is failed, rc = %d\n", __func__,
+ 				rc);
+-		mutex_unlock(&ac->cmd_lock);
+ 		kfree(buf_circ);
++		mutex_unlock(&ac->cmd_lock);
+ 		goto done;
+ 	}
+ 
++	ac->port[dir].buf = buf_circ;
+ 	buf_circ->used = dir ^ 1;
+ 	buf_circ->size = bytes_to_alloc;
+ 	buf_circ->actual_size = bytes_to_alloc;
+@@ -3102,12 +3108,6 @@ int q6asm_open_shared_io(struct audio_client *ac,
+ 		goto done;
+ 	}
+ 
+-	if (ac->port[dir].buf) {
+-		pr_err("%s: Buffer already allocated\n", __func__);
+-		rc = -EINVAL;
+-		goto done;
+-	}
+-
+ 	rc = q6asm_set_shared_circ_buff(ac, open, bufsz, bufcnt, dir);
+ 
+ 	if (rc)
+-- 
+cgit v1.1
+

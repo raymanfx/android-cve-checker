@@ -1,0 +1,53 @@
+From 51ce6aec73d80e1f1fcc9c7fa71e9c2fcbdbc0fd Mon Sep 17 00:00:00 2001
+From: Archana Sathyakumar <asathyak@codeaurora.org>
+Date: Wed, 5 Aug 2015 13:49:45 -0600
+Subject: msm-core: Ensure the userspace data is copied before access
+
+Userspace data is directly used without copying it to kernel memory.
+Ensure all the data reads within ioctl happen from the kernel memory.
+
+Change-Id: I17f6c0c4675e64e121c166b0a062e83a4c5c9757
+Signed-off-by: Archana Sathyakumar <asathyak@codeaurora.org>
+---
+ drivers/power/qcom/msm-core.c | 14 +++++++++-----
+ 1 file changed, 9 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/power/qcom/msm-core.c b/drivers/power/qcom/msm-core.c
+index f644950..41efd226 100644
+--- a/drivers/power/qcom/msm-core.c
++++ b/drivers/power/qcom/msm-core.c
+@@ -350,10 +350,14 @@ static int update_userspace_power(struct sched_params __user *argp)
+ 	int cpu;
+ 	struct cpu_activity_info *node;
+ 	struct cpu_static_info *sp, *clear_sp;
+-	int mpidr = (argp->cluster << 8);
+-	int cpumask = argp->cpumask;
++	int cpumask, cluster, mpidr;
+ 
+-	pr_debug("cpumask %d, cluster: %d\n", argp->cpumask, argp->cluster);
++	get_user(cpumask, &argp->cpumask);
++	get_user(cluster, &argp->cluster);
++	mpidr = cluster << 8;
++
++	pr_debug("%s: cpumask %d, cluster: %d\n", __func__, cpumask,
++					cluster);
+ 	for (i = 0; i < MAX_CORES_PER_CLUSTER; i++, cpumask >>= 1) {
+ 		if (!(cpumask & 0x01))
+ 			continue;
+@@ -398,11 +402,11 @@ static int update_userspace_power(struct sched_params __user *argp)
+ 	 * argp->cpumask within the cluster (argp->cluster)
+ 	 */
+ 	spin_lock(&update_lock);
+-	cpumask = argp->cpumask;
++	get_user(cpumask, &argp->cpumask);
+ 	for (i = 0; i < MAX_CORES_PER_CLUSTER; i++, cpumask >>= 1) {
+ 		if (!(cpumask & 0x01))
+ 			continue;
+-		mpidr = (argp->cluster << CLUSTER_OFFSET_FOR_MPIDR);
++		mpidr = (cluster << CLUSTER_OFFSET_FOR_MPIDR);
+ 		mpidr |= i;
+ 		for_each_possible_cpu(cpu) {
+ 			if (!(cpu_logical_map(cpu) == mpidr))
+-- 
+cgit v1.1
+

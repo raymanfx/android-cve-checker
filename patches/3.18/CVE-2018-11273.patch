@@ -1,0 +1,50 @@
+From 789d4d21c3f1818dcbf74da4a051598e8f53676c Mon Sep 17 00:00:00 2001
+From: Aditya Bavanari <abavanar@codeaurora.org>
+Date: Fri, 6 Apr 2018 18:15:43 +0530
+Subject: voice_svc: Avoid double free in voice_svc driver
+
+voice_svc_dev is allocated as a device managed resource
+and need not be freed since it is freed automatically.
+Remove the logic to free voice_svc_dev in probe failure
+and remove functions to avoid double free.
+
+CRs-Fixed: 2204285
+Change-Id: If4f9ca840b00448b987f5ce443f66b0923b01969
+Signed-off-by: Aditya Bavanari <abavanar@codeaurora.org>
+---
+ drivers/soc/qcom/qdsp6v2/voice_svc.c | 5 +----
+ 1 file changed, 1 insertion(+), 4 deletions(-)
+
+diff --git a/drivers/soc/qcom/qdsp6v2/voice_svc.c b/drivers/soc/qcom/qdsp6v2/voice_svc.c
+index 40204e10..f01ab24 100644
+--- a/drivers/soc/qcom/qdsp6v2/voice_svc.c
++++ b/drivers/soc/qcom/qdsp6v2/voice_svc.c
+@@ -773,7 +773,7 @@ static int voice_svc_probe(struct platform_device *pdev)
+ 	if (ret) {
+ 		pr_err("%s: Failed to alloc chrdev\n", __func__);
+ 		ret = -ENODEV;
+-		goto chrdev_err;
++		goto done;
+ 	}
+ 
+ 	voice_svc_dev->major = MAJOR(device_num);
+@@ -820,8 +820,6 @@ dev_err:
+ 	class_destroy(voice_svc_class);
+ class_err:
+ 	unregister_chrdev_region(0, MINOR_NUMBER);
+-chrdev_err:
+-	kfree(voice_svc_dev);
+ done:
+ 	return ret;
+ }
+@@ -835,7 +833,6 @@ static int voice_svc_remove(struct platform_device *pdev)
+ 	device_destroy(voice_svc_class, device_num);
+ 	class_destroy(voice_svc_class);
+ 	unregister_chrdev_region(0, MINOR_NUMBER);
+-	kfree(voice_svc_dev);
+ 
+ 	return 0;
+ }
+-- 
+cgit v1.1
+

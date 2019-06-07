@@ -1,0 +1,35 @@
+From a2e451a1e1d973709ccd062c9aade669cd0daca4 Mon Sep 17 00:00:00 2001
+From: Krishna Manikandan <mkrishn@codeaurora.org>
+Date: Wed, 28 Jun 2017 13:53:04 +0530
+Subject: fbdev: msm: Allocate fd with O_CLOEXEC flag
+
+When fd is requested during get_metadata call, create fd
+using O_CLOEXEC flag.
+
+CRs-Fixed: 2030638
+Change-Id: I1c874f713a3ebada63ba2c85f021aa78b04af44b
+Signed-off-by: Krishna Manikandan <mkrishn@codeaurora.org>
+---
+ drivers/video/msm/mdss/mdss_mdp_overlay.c | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/video/msm/mdss/mdss_mdp_overlay.c b/drivers/video/msm/mdss/mdss_mdp_overlay.c
+index 5f51926..5c43180 100644
+--- a/drivers/video/msm/mdss/mdss_mdp_overlay.c
++++ b/drivers/video/msm/mdss/mdss_mdp_overlay.c
+@@ -5212,9 +5212,10 @@ static int mdss_fb_get_metadata(struct msm_fb_data_type *mfd,
+ 		ret = mdss_fb_get_hw_caps(mfd, &metadata->data.caps);
+ 		break;
+ 	case metadata_op_get_ion_fd:
+-		if (mfd->fb_ion_handle) {
++		if (mfd->fb_ion_handle && mfd->fb_ion_client) {
+ 			metadata->data.fbmem_ionfd =
+-				dma_buf_fd(mfd->fbmem_buf, 0);
++				ion_share_dma_buf_fd(mfd->fb_ion_client,
++					mfd->fb_ion_handle);
+ 			if (metadata->data.fbmem_ionfd < 0)
+ 				pr_err("fd allocation failed. fd = %d\n",
+ 						metadata->data.fbmem_ionfd);
+-- 
+cgit v1.1
+

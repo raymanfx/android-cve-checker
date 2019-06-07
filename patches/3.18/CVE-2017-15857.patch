@@ -1,0 +1,55 @@
+From 7c2ad195dedaab01eeea64f97af1ebaa38277a57 Mon Sep 17 00:00:00 2001
+From: Haibin Liu <haibinl@qti.qualcomm.com>
+Date: Tue, 24 Oct 2017 20:32:48 +0800
+Subject: msm: sensor: actuator: avoid accessing out of bound memory
+
+Issue:
+When total_steps is updated, after that, copy_from_user
+fails with an error, then, i2c_reg_tbl is not allocated.
+In this case, when calling msm_actuator_parse_i2c_params,
+it lead to out-of-bound memory write.
+
+Fix:
+1) Assign total_steps to zero when error from copying.
+2) Add NULL pointer check for i2c tbl.
+
+CRs-Fixed: 2111672
+Change-Id: Ib9dcb182356e2df8078c131edfd0791fa95a35e0
+Signed-off-by: Haibin Liu <haibinl@codeaurora.org>
+---
+ .../platform/msm/camera_v2/sensor/actuator/msm_actuator.c     | 11 +++++++++--
+ 1 file changed, 9 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/media/platform/msm/camera_v2/sensor/actuator/msm_actuator.c b/drivers/media/platform/msm/camera_v2/sensor/actuator/msm_actuator.c
+index f3a2fe0..3232978d 100644
+--- a/drivers/media/platform/msm/camera_v2/sensor/actuator/msm_actuator.c
++++ b/drivers/media/platform/msm/camera_v2/sensor/actuator/msm_actuator.c
+@@ -96,6 +96,11 @@ static void msm_actuator_parse_i2c_params(struct msm_actuator_ctrl_t *a_ctrl,
+ 		return;
+ 	}
+ 
++	if (a_ctrl->i2c_reg_tbl == NULL) {
++		pr_err("failed. i2c reg tabl is NULL");
++		return;
++	}
++
+ 	size = a_ctrl->reg_tbl_size;
+ 	write_arr = a_ctrl->reg_tbl;
+ 	i2c_tbl = a_ctrl->i2c_reg_tbl;
+@@ -1278,9 +1283,11 @@ static int32_t msm_actuator_set_param(struct msm_actuator_ctrl_t *a_ctrl,
+ 
+ 	if (copy_from_user(&a_ctrl->region_params,
+ 		(void *)set_info->af_tuning_params.region_params,
+-		a_ctrl->region_size * sizeof(struct region_params_t)))
++		a_ctrl->region_size * sizeof(struct region_params_t))) {
++		a_ctrl->total_steps = 0;
++		pr_err("Error copying region_params\n");
+ 		return -EFAULT;
+-
++	}
+ 	if (a_ctrl->act_device_type == MSM_CAMERA_PLATFORM_DEVICE) {
+ 		cci_client = a_ctrl->i2c_client.cci_client;
+ 		cci_client->sid =
+-- 
+cgit v1.1
+

@@ -1,0 +1,30 @@
+From b17c33ea2dafc8fd11b5050d750fefe0b53f226b Mon Sep 17 00:00:00 2001
+From: Zhen Kong <zkong@codeaurora.org>
+Date: Fri, 13 Oct 2017 14:01:48 -0700
+Subject: qseecom: fix an app unloading issue when the app is blocked
+
+Reset app_crash flag to make sure app entry is not freed when
+there is another client still being blocked on the same app.
+
+Change-Id: I25d236abc97e60fe8a4abbbc8c086291c764a9c1
+Signed-off-by: Zhen Kong <zkong@codeaurora.org>
+---
+ drivers/misc/qseecom.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/drivers/misc/qseecom.c b/drivers/misc/qseecom.c
+index e70bde2..b990b0e 100644
+--- a/drivers/misc/qseecom.c
++++ b/drivers/misc/qseecom.c
+@@ -2541,6 +2541,8 @@ static int qseecom_unload_app(struct qseecom_dev_handle *data,
+ 				if (!strcmp((void *)ptr_app->app_name,
+ 					(void *)data->client.app_name)) {
+ 					found_app = true;
++					if (ptr_app->app_blocked)
++						app_crash = false;
+ 					if (app_crash || ptr_app->ref_cnt == 1)
+ 						unload = true;
+ 					break;
+-- 
+cgit v1.1
+
