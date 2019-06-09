@@ -1,0 +1,34 @@
+From 35855e455a1f02292a3a78884f261a741b40e126 Mon Sep 17 00:00:00 2001
+From: Xiaoyu Ye <benyxy@codeaurora.org>
+Date: Fri, 12 May 2017 16:09:01 -0700
+Subject: [PATCH] ASoC: msm-cpe: Fix range checking in function fw_name_store
+
+The range checking between "WCD_CPE_IMAGE_FNAME_MAX" and
+"copy_count" is off-by-one due to the size of array
+"core->dyn_fname" is "WCD_CPE_IMAGE_FNAME_MAX". Subtract
+one from the range checking to fix this issue.
+
+Bug: 63868780
+Change-Id: I87fd55206f79ad7b13c3878f6642bf5579303b17
+Signed-off-by: Xiaoyu Ye <benyxy@codeaurora.org>
+---
+ sound/soc/codecs/wcd_cpe_core.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/sound/soc/codecs/wcd_cpe_core.c b/sound/soc/codecs/wcd_cpe_core.c
+index 5f7809eca8d52..ad735a85926e7 100644
+--- a/sound/soc/codecs/wcd_cpe_core.c
++++ b/sound/soc/codecs/wcd_cpe_core.c
+@@ -1742,10 +1742,10 @@ static ssize_t fw_name_store(struct wcd_cpe_core *core,
+ 	if (pos)
+ 		copy_count = pos - buf;
+ 
+-	if (copy_count > WCD_CPE_IMAGE_FNAME_MAX) {
++	if (copy_count > (WCD_CPE_IMAGE_FNAME_MAX - 1)) {
+ 		dev_err(core->dev,
+ 			"%s: Invalid length %d, max allowed %d\n",
+-			__func__, copy_count, WCD_CPE_IMAGE_FNAME_MAX);
++			__func__, copy_count, WCD_CPE_IMAGE_FNAME_MAX - 1);
+ 		return -EINVAL;
+ 	}
+ 

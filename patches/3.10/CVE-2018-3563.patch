@@ -1,0 +1,29 @@
+From f6214fdc04e874a20617a7365c04e720a587c14f Mon Sep 17 00:00:00 2001
+From: Aditya Bavanari <abavanar@codeaurora.org>
+Date: Tue, 19 Dec 2017 20:34:26 +0530
+Subject: [PATCH] ASoC: apr: Add validity check to APR port
+
+Add boundary checks for APR port received from ADSP.
+
+Change-Id: Ia0a3859b30536bd6aa6030cdbd44c783c9558068
+CRs-Fixed: 2143207
+Bug: 72956842
+Signed-off-by: Aditya Bavanari <abavanar@codeaurora.org>
+---
+ drivers/soc/qcom/qdsp6v2/apr.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/soc/qcom/qdsp6v2/apr.c b/drivers/soc/qcom/qdsp6v2/apr.c
+index a295373ed88c4..5f25054e9f02e 100644
+--- a/drivers/soc/qcom/qdsp6v2/apr.c
++++ b/drivers/soc/qcom/qdsp6v2/apr.c
+@@ -551,7 +551,8 @@ void apr_cb_func(void *buf, int len, void *priv)
+ 
+ 	temp_port = ((data.dest_port >> 8) * 8) + (data.dest_port & 0xFF);
+ 	pr_debug("port = %d t_port = %d\n", data.src_port, temp_port);
+-	if (c_svc->port_cnt && c_svc->port_fn[temp_port])
++	if (((temp_port >= 0) && (temp_port < APR_MAX_PORTS))
++		&& (c_svc->port_cnt && c_svc->port_fn[temp_port]))
+ 		c_svc->port_fn[temp_port](&data,  c_svc->port_priv[temp_port]);
+ 	else if (c_svc->fn)
+ 		c_svc->fn(&data, c_svc->priv);

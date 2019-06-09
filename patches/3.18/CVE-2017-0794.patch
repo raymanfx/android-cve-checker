@@ -1,0 +1,74 @@
+From 547645480548a11e1399896e3fbe38a7e43663e4 Mon Sep 17 00:00:00 2001
+From: Robb Glasser <rglasser@google.com>
+Date: Wed, 16 Aug 2017 12:38:02 +0530
+Subject: [PATCH] Prevent potential double frees in sg driver
+
+sg_ioctl could be spammed by requests, leading to a double free in
+__free_pages. This protects the entry points of sg_ioctl where the
+memory could be corrupted by a double call to __free_pages if multiple
+requests are happening concurrently.
+
+Mot-CRs-fixed: (CR)
+CVE-fixed: CVE-2017-0794
+Bug:35644812
+
+Change-Id: Ie13f65beb6974430f90292e2742841b26aecb8b1
+Signed-off-by: Robb Glasser <rglasser@google.com>
+Signed-off-by: Amarendra Reddy <amarenr@motorola.com>
+Reviewed-on: https://gerrit.mot.com/1043178
+SLTApproved: Slta Waiver
+SME-Granted: SME Approvals Granted
+Tested-by: Jira Key
+Reviewed-by: Igor Kovalenko <igork@motorola.com>
+Submit-Approved: Jira Key
+(cherry picked from commit cbebdeecae944ec4f4846c35013bda59ccdb380a)
+---
+ drivers/scsi/sg.c | 10 ++++++++--
+ 1 file changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/scsi/sg.c b/drivers/scsi/sg.c
+index 8a2a593c41e9d..b739d83a26dbd 100644
+--- a/drivers/scsi/sg.c
++++ b/drivers/scsi/sg.c
+@@ -875,8 +875,10 @@ sg_ioctl(struct file *filp, unsigned int cmd_in, unsigned long arg)
+ 			return -ENXIO;
+ 		if (!access_ok(VERIFY_WRITE, p, SZ_SG_IO_HDR))
+ 			return -EFAULT;
++		mutex_lock(&sfp->parentdp->open_rel_lock);
+ 		result = sg_new_write(sfp, filp, p, SZ_SG_IO_HDR,
+ 				 1, read_only, 1, &srp);
++		mutex_unlock(&sfp->parentdp->open_rel_lock);
+ 		if (result < 0)
+ 			return result;
+ 		result = wait_event_interruptible(sfp->read_wait,
+@@ -916,8 +918,10 @@ sg_ioctl(struct file *filp, unsigned int cmd_in, unsigned long arg)
+ 			sfp->low_dma = 1;
+ 			if ((0 == sfp->low_dma) && (0 == sg_res_in_use(sfp))) {
+ 				val = (int) sfp->reserve.bufflen;
++				mutex_lock(&sfp->parentdp->open_rel_lock);
+ 				sg_remove_scat(sfp, &sfp->reserve);
+ 				sg_build_reserve(sfp, val);
++				mutex_unlock(&sfp->parentdp->open_rel_lock);
+ 			}
+ 		} else {
+ 			if (atomic_read(&sdp->detaching))
+@@ -985,15 +989,17 @@ sg_ioctl(struct file *filp, unsigned int cmd_in, unsigned long arg)
+ 		result = get_user(val, ip);
+ 		if (result)
+ 			return result;
+-                if (val < 0)
+-                        return -EINVAL;
++		if (val < 0)
++			return -EINVAL;
+ 		val = min_t(int, val,
+ 			    max_sectors_bytes(sdp->device->request_queue));
+ 		if (val != sfp->reserve.bufflen) {
+ 			if (sg_res_in_use(sfp) || sfp->mmap_called)
+ 				return -EBUSY;
++			mutex_lock(&sfp->parentdp->open_rel_lock);
+ 			sg_remove_scat(sfp, &sfp->reserve);
+ 			sg_build_reserve(sfp, val);
++			mutex_unlock(&sfp->parentdp->open_rel_lock);
+ 		}
+ 		return 0;
+ 	case SG_GET_RESERVED_SIZE:

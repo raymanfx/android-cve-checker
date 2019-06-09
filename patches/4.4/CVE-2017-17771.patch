@@ -1,0 +1,58 @@
+From a452045792bc09548b4e1b940aa8adfed822b51c Mon Sep 17 00:00:00 2001
+From: Senthil Kumar Rajagopal <skrajago@codeaurora.org>
+Date: Fri, 10 Feb 2017 15:07:54 +0530
+Subject: msm: camera: isp: Handle array out of bounds
+
+The pointer qbuf_buf comes from userspace.
+qbuf_buf->num_planes is used with no bound check,
+which if set to a large value, it will overflow
+buf_info->mapped_info and qbuf_buf->planes
+
+CRs-Fixed: 2003798
+
+Change-Id: I332e0424e57bb14b481a740604a09350e6f029a8
+Signed-off-by: Senthil Kumar Rajagopal <skrajago@codeaurora.org>
+---
+ drivers/media/platform/msm/camera_v2/isp/msm_buf_mgr.c | 15 ++++++++++++++-
+ 1 file changed, 14 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/media/platform/msm/camera_v2/isp/msm_buf_mgr.c b/drivers/media/platform/msm/camera_v2/isp/msm_buf_mgr.c
+index de29692..cf33f64 100644
+--- a/drivers/media/platform/msm/camera_v2/isp/msm_buf_mgr.c
++++ b/drivers/media/platform/msm/camera_v2/isp/msm_buf_mgr.c
+@@ -1,4 +1,4 @@
+-/* Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
++/* Copyright (c) 2013-2017, The Linux Foundation. All rights reserved.
+  *
+  * This program is free software; you can redistribute it and/or modify
+  * it under the terms of the GNU General Public License version 2 and
+@@ -196,6 +196,13 @@ static int msm_isp_prepare_v4l2_buf(struct msm_isp_buf_mgr *buf_mgr,
+ 			__func__, stream_id);
+ 		return -EINVAL;
+ 	}
++
++	if (qbuf_buf->num_planes > MAX_PLANES_PER_STREAM) {
++		pr_err("%s: Invalid num_planes %d , stream id %x\n",
++			__func__, qbuf_buf->num_planes, stream_id);
++		return -EINVAL;
++	}
++
+ 	for (i = 0; i < qbuf_buf->num_planes; i++) {
+ 		mapped_info = &buf_info->mapped_info[i];
+ 		mapped_info->buf_fd = qbuf_buf->planes[i].addr;
+@@ -249,6 +256,12 @@ static void msm_isp_unprepare_v4l2_buf(
+ 		return;
+ 	}
+ 
++	if (buf_info->num_planes > VIDEO_MAX_PLANES) {
++		pr_err("%s: Invalid num_planes %d , stream id %x\n",
++			__func__, buf_info->num_planes, stream_id);
++		return;
++	}
++
+ 	bufq = msm_isp_get_bufq(buf_mgr, buf_info->bufq_handle);
+ 	if (!bufq) {
+ 		pr_err("%s: Invalid bufq, stream id %x\n",
+-- 
+cgit v1.1
+

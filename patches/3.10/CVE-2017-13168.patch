@@ -1,0 +1,26 @@
+From 3e28042fe747c6119d0364e653148a5e13b23bc7 Mon Sep 17 00:00:00 2001
+From: Roberto Pereira <rpere@google.com>
+Date: Tue, 10 Oct 2017 17:14:48 -0700
+Subject: [PATCH] ANDROID: scsi: Add segment checking in sg_read
+
+Bug: 65023233
+Signed-off-by: Roberto Pereira <rpere@google.com>
+Change-Id: Ib45f402cf304f9b8bf18884738f92b9c3db55573
+---
+ drivers/scsi/sg.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/drivers/scsi/sg.c b/drivers/scsi/sg.c
+index 9a600f05ab57a..f40dbef23c316 100644
+--- a/drivers/scsi/sg.c
++++ b/drivers/scsi/sg.c
+@@ -382,6 +382,9 @@ sg_read(struct file *filp, char __user *buf, size_t count, loff_t * ppos)
+ 	struct sg_header *old_hdr = NULL;
+ 	int retval = 0;
+ 
++	if (unlikely(segment_eq(get_fs(), KERNEL_DS)))
++		return -EINVAL;
++
+ 	if ((!(sfp = (Sg_fd *) filp->private_data)) || (!(sdp = sfp->parentdp)))
+ 		return -ENXIO;
+ 	SCSI_LOG_TIMEOUT(3, printk("sg_read: %s, count=%d\n",

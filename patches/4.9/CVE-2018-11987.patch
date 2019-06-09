@@ -1,0 +1,38 @@
+From 5e9ffcfa152ecb2832990c42fcd8a0f2e63c2c04 Mon Sep 17 00:00:00 2001
+From: Vinayak Menon <vinmenon@codeaurora.org>
+Date: Wed, 13 Jun 2018 20:59:29 +0530
+Subject: ion: invalidate the pool pointers after free
+
+ion_system_heap_destroy_pools frees the pool, but
+does not invalidate the pointer. This can result in
+a double free if ion_system_heap_create_pools fails,
+and then causes ion_system_heap_create to call into
+ion_system_heap_destroy_pools again from the error
+path. This can happen in ion_system_heap_create when
+one of the secure pool creation fails.
+
+Change-Id: Ic73ca78722aa5a575cc4dd7c1caa560b518094f2
+Signed-off-by: Vinayak Menon <vinmenon@codeaurora.org>
+---
+ drivers/staging/android/ion/ion_system_heap.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/staging/android/ion/ion_system_heap.c b/drivers/staging/android/ion/ion_system_heap.c
+index e3985f6..37b6ad4 100644
+--- a/drivers/staging/android/ion/ion_system_heap.c
++++ b/drivers/staging/android/ion/ion_system_heap.c
+@@ -756,8 +756,10 @@ static void ion_system_heap_destroy_pools(struct ion_page_pool **pools)
+ {
+ 	int i;
+ 	for (i = 0; i < num_orders; i++)
+-		if (pools[i])
++		if (pools[i]) {
+ 			ion_page_pool_destroy(pools[i]);
++			pools[i] = NULL;
++		}
+ }
+ 
+ /**
+-- 
+cgit v1.1
+

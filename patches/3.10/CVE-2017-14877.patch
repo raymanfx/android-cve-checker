@@ -1,0 +1,39 @@
+From ca395c15c49cf6463a39d197b6a9331d183d94cb Mon Sep 17 00:00:00 2001
+From: Mohammed Javid <mjavid@codeaurora.org>
+Date: Sun, 25 Jun 2017 01:01:55 +0530
+Subject: msm:ipa: Fix to kasan use-after-free issue
+
+Added mutex lock to query rt table function also to sync
+with other ioctl calls in ipa.
+Change-Id: I65d46c0ef28b5e6260c92473fd15e9763de20146
+Acked-by: Ashok Vuyyuru <avuyyuru@qti.qualcomm.com>
+Signed-off-by: Mohammed Javid <mjavid@codeaurora.org>
+---
+ drivers/platform/msm/ipa/ipa_rt.c | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/platform/msm/ipa/ipa_rt.c b/drivers/platform/msm/ipa/ipa_rt.c
+index 748c10f..5cabfa5 100644
+--- a/drivers/platform/msm/ipa/ipa_rt.c
++++ b/drivers/platform/msm/ipa/ipa_rt.c
+@@ -851,12 +851,16 @@ int ipa_query_rt_index(struct ipa_ioc_get_rt_tbl_indx *in)
+ 		return -EINVAL;
+ 	}
+ 
++	mutex_lock(&ipa_ctx->lock);
+ 	/* check if this table exists */
+ 	entry = __ipa_find_rt_tbl(in->ip, in->name);
+-	if (!entry)
++	if (!entry){
++		mutex_unlock(&ipa_ctx->lock);
+ 		return -EFAULT;
++	}
+ 
+ 	in->idx  = entry->idx;
++	mutex_unlock(&ipa_ctx->lock);
+ 	return 0;
+ }
+ 
+-- 
+cgit v1.1
+

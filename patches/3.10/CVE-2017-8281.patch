@@ -1,0 +1,195 @@
+From 1ede4694d5b28e1992c61613d67a6e3a18f96222 Mon Sep 17 00:00:00 2001
+From: Mohit Aggarwal <maggarwa@codeaurora.org>
+Date: Mon, 21 Mar 2016 12:57:38 +0530
+Subject: diag: Fix for possible dci stale entries
+
+This patch provides the protection to dci client
+entries from corruption.
+
+CRs-Fixed: 984942 992683
+Bug: 62378232
+Change-Id: Ifcd9f14dc03d9e42a31b3e126839489881e98303
+Signed-off-by: Manoj Prabhu B <bmanoj@codeaurora.org>
+Signed-off-by: Mohit Aggarwal <maggarwa@codeaurora.org>
+---
+ drivers/char/diag/diag_dci.c      |  6 ++----
+ drivers/char/diag/diagchar_core.c | 44 +++++++++++++++++++++++++++++++++------
+ 2 files changed, 40 insertions(+), 10 deletions(-)
+
+diff --git a/drivers/char/diag/diag_dci.c b/drivers/char/diag/diag_dci.c
+index 2fb2c1f..c5c7b43 100644
+--- a/drivers/char/diag/diag_dci.c
++++ b/drivers/char/diag/diag_dci.c
+@@ -1327,6 +1327,7 @@ void diag_update_smd_dci_work_fn(struct work_struct *work)
+ 	 * which log entries in the cumulative logs that need
+ 	 * to be updated on the peripheral.
+ 	 */
++	mutex_lock(&driver->dci_mutex);
+ 	list_for_each_safe(start, temp, &driver->dci_client_list) {
+ 		entry = list_entry(start, struct diag_dci_client_tbl, track);
+ 		if (entry->client_info.token != DCI_LOCAL_PROC)
+@@ -1338,6 +1339,7 @@ void diag_update_smd_dci_work_fn(struct work_struct *work)
+ 			client_log_mask_ptr += 514;
+ 		}
+ 	}
++	mutex_unlock(&driver->dci_mutex);
+ 
+ 	mutex_lock(&dci_log_mask_mutex);
+ 	/* Update the appropriate dirty bits in the cumulative mask */
+@@ -2985,8 +2987,6 @@ int diag_dci_deinit_client(struct diag_dci_client_tbl *entry)
+ 	if (!entry)
+ 		return DIAG_DCI_NOT_SUPPORTED;
+ 
+-	mutex_lock(&driver->dci_mutex);
+-
+ 	token = entry->client_info.token;
+ 	/*
+ 	 * Remove the entry from the list before freeing the buffers
+@@ -3102,8 +3102,6 @@ int diag_dci_deinit_client(struct diag_dci_client_tbl *entry)
+ 	}
+ 	queue_work(driver->diag_real_time_wq, &driver->diag_real_time_work);
+ 
+-	mutex_unlock(&driver->dci_mutex);
+-
+ 	return DIAG_DCI_NO_ERROR;
+ }
+ 
+diff --git a/drivers/char/diag/diagchar_core.c b/drivers/char/diag/diagchar_core.c
+index fda5207..c9461d6 100644
+--- a/drivers/char/diag/diagchar_core.c
++++ b/drivers/char/diag/diagchar_core.c
+@@ -348,9 +348,11 @@ static int diagchar_close(struct inode *inode, struct file *file)
+ 	* This will specially help in case of ungraceful exit of any DCI client
+ 	* This call will remove any pending registrations of such client
+ 	*/
++	mutex_lock(&driver->dci_mutex);
+ 	dci_entry = dci_lookup_client_entry_pid(current->pid);
+ 	if (dci_entry)
+ 		diag_dci_deinit_client(dci_entry);
++	mutex_unlock(&driver->dci_mutex);
+ 	/* If the exiting process is the socket process */
+ 	mutex_lock(&driver->diagchar_mutex);
+ 	if (driver->socket_process &&
+@@ -1261,32 +1263,46 @@ long diagchar_compat_ioctl(struct file *filp,
+ 			mutex_unlock(&driver->dci_mutex);
+ 			return DIAG_DCI_NOT_SUPPORTED;
+ 		}
+-		mutex_unlock(&driver->dci_mutex);
+ 		result = diag_dci_deinit_client(dci_client);
++		mutex_unlock(&driver->dci_mutex);
+ 		break;
+ 	case DIAG_IOCTL_DCI_SUPPORT:
+ 		result = diag_ioctl_dci_support(ioarg);
+ 		break;
+ 	case DIAG_IOCTL_DCI_HEALTH_STATS:
++		mutex_lock(&driver->dci_mutex);
+ 		result = diag_ioctl_dci_health_stats(ioarg);
++		mutex_unlock(&driver->dci_mutex);
+ 		break;
+ 	case DIAG_IOCTL_DCI_LOG_STATUS:
++		mutex_lock(&driver->dci_mutex);
+ 		result = diag_ioctl_dci_log_status(ioarg);
++		mutex_unlock(&driver->dci_mutex);
+ 		break;
+ 	case DIAG_IOCTL_DCI_EVENT_STATUS:
++		mutex_lock(&driver->dci_mutex);
+ 		result = diag_ioctl_dci_event_status(ioarg);
++		mutex_unlock(&driver->dci_mutex);
+ 		break;
+ 	case DIAG_IOCTL_DCI_CLEAR_LOGS:
++		mutex_lock(&driver->dci_mutex);
+ 		if (copy_from_user((void *)&client_id, (void __user *)ioarg,
+-			sizeof(int)))
++			sizeof(int))) {
++			mutex_unlock(&driver->dci_mutex);
+ 			return -EFAULT;
++		}
+ 		result = diag_dci_clear_log_mask(client_id);
++		mutex_unlock(&driver->dci_mutex);
+ 		break;
+ 	case DIAG_IOCTL_DCI_CLEAR_EVENTS:
++		mutex_lock(&driver->dci_mutex);
+ 		if (copy_from_user(&client_id, (void __user *)ioarg,
+-			sizeof(int)))
++			sizeof(int))) {
++			mutex_unlock(&driver->dci_mutex);
+ 			return -EFAULT;
++		}
+ 		result = diag_dci_clear_event_mask(client_id);
++		mutex_unlock(&driver->dci_mutex);
+ 		break;
+ 	case DIAG_IOCTL_LSM_DEINIT:
+ 		result = diag_ioctl_lsm_deinit();
+@@ -1306,7 +1322,9 @@ long diagchar_compat_ioctl(struct file *filp,
+ 			result = 1;
+ 		break;
+ 	case DIAG_IOCTL_VOTE_REAL_TIME:
++		mutex_lock(&driver->dci_mutex);
+ 		result = diag_ioctl_vote_real_time(ioarg);
++		mutex_unlock(&driver->dci_mutex);
+ 		break;
+ 	case DIAG_IOCTL_GET_REAL_TIME:
+ 		result = diag_ioctl_get_real_time(ioarg);
+@@ -1364,17 +1382,21 @@ long diagchar_ioctl(struct file *filp,
+ 			mutex_unlock(&driver->dci_mutex);
+ 			return DIAG_DCI_NOT_SUPPORTED;
+ 		}
+-		mutex_unlock(&driver->dci_mutex);
+ 		result = diag_dci_deinit_client(dci_client);
++		mutex_unlock(&driver->dci_mutex);
+ 		break;
+ 	case DIAG_IOCTL_DCI_SUPPORT:
+ 		result = diag_ioctl_dci_support(ioarg);
+ 		break;
+ 	case DIAG_IOCTL_DCI_HEALTH_STATS:
++		mutex_lock(&driver->dci_mutex);
+ 		result = diag_ioctl_dci_health_stats(ioarg);
++		mutex_unlock(&driver->dci_mutex);
+ 		break;
+ 	case DIAG_IOCTL_DCI_LOG_STATUS:
++		mutex_lock(&driver->dci_mutex);
+ 		result = diag_ioctl_dci_log_status(ioarg);
++		mutex_unlock(&driver->dci_mutex);
+ 		break;
+ 	case DIAG_IOCTL_DCI_EVENT_STATUS:
+ 		mutex_lock(&driver->dci_mutex);
+@@ -1382,16 +1404,24 @@ long diagchar_ioctl(struct file *filp,
+ 		mutex_unlock(&driver->dci_mutex);
+ 		break;
+ 	case DIAG_IOCTL_DCI_CLEAR_LOGS:
++		mutex_lock(&driver->dci_mutex);
+ 		if (copy_from_user((void *)&client_id, (void __user *)ioarg,
+-			sizeof(int)))
++			sizeof(int))) {
++			mutex_unlock(&driver->dci_mutex);
+ 			return -EFAULT;
++		}
+ 		result = diag_dci_clear_log_mask(client_id);
++		mutex_unlock(&driver->dci_mutex);
+ 		break;
+ 	case DIAG_IOCTL_DCI_CLEAR_EVENTS:
++		mutex_lock(&driver->dci_mutex);
+ 		if (copy_from_user(&client_id, (void __user *)ioarg,
+-			sizeof(int)))
++			sizeof(int))) {
++			mutex_unlock(&driver->dci_mutex);
+ 			return -EFAULT;
++		}
+ 		result = diag_dci_clear_event_mask(client_id);
++		mutex_unlock(&driver->dci_mutex);
+ 		break;
+ 	case DIAG_IOCTL_LSM_DEINIT:
+ 		result = diag_ioctl_lsm_deinit();
+@@ -1411,7 +1441,9 @@ long diagchar_ioctl(struct file *filp,
+ 			result = 1;
+ 		break;
+ 	case DIAG_IOCTL_VOTE_REAL_TIME:
++		mutex_lock(&driver->dci_mutex);
+ 		result = diag_ioctl_vote_real_time(ioarg);
++		mutex_unlock(&driver->dci_mutex);
+ 		break;
+ 	case DIAG_IOCTL_GET_REAL_TIME:
+ 		result = diag_ioctl_get_real_time(ioarg);
+-- 
+cgit v1.1
+

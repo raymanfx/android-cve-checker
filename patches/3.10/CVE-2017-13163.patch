@@ -1,0 +1,50 @@
+From aa469e2bae1d36ecc7cf8425577627dbc4641493 Mon Sep 17 00:00:00 2001
+From: Jerry Zhang <zhangjerry@google.com>
+Date: Mon, 25 Sep 2017 18:14:51 -0700
+Subject: [PATCH] ANDROID: usb: gadget: f_mtp: Return error if count is
+ negative
+
+If the user passes in a negative file size in a int64,
+this will compare to be smaller than buffer length,
+and it will get truncated to form a read length that
+is larger than the buffer length.
+
+To fix, return -EINVAL if the count argument is negative,
+so the loop will never happen.
+
+Bug: 37429972
+Test: Test with PoC
+Change-Id: I5d52e38e6fbe2c17eb8c493f9eb81df6cfd780a4
+Signed-off-by: Jerry Zhang <zhangjerry@google.com>
+---
+ drivers/usb/gadget/f_mtp.c | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/drivers/usb/gadget/f_mtp.c b/drivers/usb/gadget/f_mtp.c
+index 5a06296aaded6..37f171d2ff3be 100644
+--- a/drivers/usb/gadget/f_mtp.c
++++ b/drivers/usb/gadget/f_mtp.c
+@@ -767,6 +767,11 @@ static void send_file_work(struct work_struct *data)
+ 	offset = dev->xfer_file_offset;
+ 	count = dev->xfer_file_length;
+ 
++	if (count < 0) {
++		dev->xfer_result = -EINVAL;
++		return;
++	}
++
+ 	DBG(cdev, "send_file_work(%lld %lld)\n", offset, count);
+ 
+ 	if (dev->xfer_send_header) {
+@@ -869,6 +874,11 @@ static void receive_file_work(struct work_struct *data)
+ 	offset = dev->xfer_file_offset;
+ 	count = dev->xfer_file_length;
+ 
++	if (count < 0) {
++		dev->xfer_result = -EINVAL;
++		return;
++	}
++
+ 	DBG(cdev, "receive_file_work(%lld)\n", count);
+ 	if (!IS_ALIGNED(count, dev->ep_out->maxpacket))
+ 		DBG(cdev, "%s- count(%lld) not multiple of mtu(%d)\n", __func__,

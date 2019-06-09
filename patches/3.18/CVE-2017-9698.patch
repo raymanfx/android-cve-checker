@@ -1,0 +1,47 @@
+From 56eda148aa841cd7e4af75ffbf8fa33d496a8ef0 Mon Sep 17 00:00:00 2001
+From: Jordan Crouse <jcrouse@codeaurora.org>
+Date: Mon, 12 Jun 2017 09:16:42 -0600
+Subject: [PATCH] drm/msm: Fix possible overflow issue in submit_cmd
+
+When verifying that the submit_cmd offset and size do not exceed the
+bounds of the GEM object make sure to cast the math operation
+into a suitably large buffer to account for overflow.
+
+Bug: 63868678
+Change-Id: Ic0dedbad97513ee538d539e771038b3cf0405e91
+Signed-off-by: Jordan Crouse <jcrouse@codeaurora.org>
+Signed-off-by: Sharat Masetty <smasetty@codeaurora.org>
+---
+ drivers/gpu/drm/msm/msm_gem_submit.c | 12 ++++++++----
+ 1 file changed, 8 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/msm/msm_gem_submit.c b/drivers/gpu/drm/msm/msm_gem_submit.c
+index 4ff8c334e7c8a..cbf3f29205211 100644
+--- a/drivers/gpu/drm/msm/msm_gem_submit.c
++++ b/drivers/gpu/drm/msm/msm_gem_submit.c
+@@ -377,7 +377,8 @@ int msm_ioctl_gem_submit(struct drm_device *dev, void *data,
+ 		void __user *userptr =
+ 			to_user_ptr(args->cmds + (i * sizeof(submit_cmd)));
+ 		struct msm_gem_object *msm_obj;
+-		uint32_t iova;
++		uint64_t iova;
++		size_t size;
+ 
+ 		ret = copy_from_user(&submit_cmd, userptr, sizeof(submit_cmd));
+ 		if (ret) {
+@@ -409,9 +410,12 @@ int msm_ioctl_gem_submit(struct drm_device *dev, void *data,
+ 			goto out;
+ 		}
+ 
+-		if ((submit_cmd.size + submit_cmd.submit_offset) >=
+-				msm_obj->base.size) {
+-			DRM_ERROR("invalid cmdstream size: %u\n", submit_cmd.size);
++		size = submit_cmd.size + submit_cmd.submit_offset;
++
++		if (!submit_cmd.size || (size < submit_cmd.size) ||
++			(size > msm_obj->base.size)) {
++			DRM_ERROR("invalid cmdstream offset/size: %u/%u\n",
++				submit_cmd.submit_offset, submit_cmd.size);
+ 			ret = -EINVAL;
+ 			goto out;
+ 		}

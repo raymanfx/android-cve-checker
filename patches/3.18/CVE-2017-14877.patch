@@ -1,0 +1,63 @@
+From c2fd287bf16dc5e9f98145ba91083bdc56dfc01f Mon Sep 17 00:00:00 2001
+From: Mohammed Javid <mjavid@codeaurora.org>
+Date: Thu, 15 Jun 2017 18:39:07 +0530
+Subject: msm:ipa: Fix to kasan use-after-free issue
+
+Added mutex lock to query rt table function also to sync
+with other ioctl calls in both ipa v2/v3.
+
+Change-Id: I65d46c0ef28b5e6260c92473fd15e9763de20146
+Acked-by: Ashok Vuyyuru <avuyyuru@qti.qualcomm.com>
+Signed-off-by: Mohammed Javid <mjavid@codeaurora.org>
+---
+ drivers/platform/msm/ipa/ipa_v2/ipa_rt.c | 6 +++++-
+ drivers/platform/msm/ipa/ipa_v3/ipa_rt.c | 7 +++++--
+ 2 files changed, 10 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/platform/msm/ipa/ipa_v2/ipa_rt.c b/drivers/platform/msm/ipa/ipa_v2/ipa_rt.c
+index ca27488..8ce3617 100644
+--- a/drivers/platform/msm/ipa/ipa_v2/ipa_rt.c
++++ b/drivers/platform/msm/ipa/ipa_v2/ipa_rt.c
+@@ -852,12 +852,16 @@ int ipa2_query_rt_index(struct ipa_ioc_get_rt_tbl_indx *in)
+ 		return -EINVAL;
+ 	}
+ 
++	mutex_lock(&ipa_ctx->lock);
+ 	/* check if this table exists */
+ 	entry = __ipa_find_rt_tbl(in->ip, in->name);
+-	if (!entry)
++	if (!entry) {
++		mutex_unlock(&ipa_ctx->lock);
+ 		return -EFAULT;
++	}
+ 
+ 	in->idx  = entry->idx;
++	mutex_unlock(&ipa_ctx->lock);
+ 	return 0;
+ }
+ 
+diff --git a/drivers/platform/msm/ipa/ipa_v3/ipa_rt.c b/drivers/platform/msm/ipa/ipa_v3/ipa_rt.c
+index 43d0a37..2e1a4ba 100644
+--- a/drivers/platform/msm/ipa/ipa_v3/ipa_rt.c
++++ b/drivers/platform/msm/ipa/ipa_v3/ipa_rt.c
+@@ -901,12 +901,15 @@ int ipa3_query_rt_index(struct ipa_ioc_get_rt_tbl_indx *in)
+ 		return -EINVAL;
+ 	}
+ 
++	mutex_lock(&ipa3_ctx->lock);
+ 	/* check if this table exists */
+ 	entry = __ipa3_find_rt_tbl(in->ip, in->name);
+-	if (!entry)
++	if (!entry) {
++		mutex_unlock(&ipa3_ctx->lock);
+ 		return -EFAULT;
+-
++	}
+ 	in->idx  = entry->idx;
++	mutex_unlock(&ipa3_ctx->lock);
+ 	return 0;
+ }
+ 
+-- 
+cgit v1.1
+

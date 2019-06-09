@@ -1,0 +1,32 @@
+From 81ea9c34f575422a78015535c619500c34b8a69c Mon Sep 17 00:00:00 2001
+From: Mohammed Javid <mjavid@codeaurora.org>
+Date: Mon, 7 Aug 2017 16:05:27 +0530
+Subject: msm: ipa: Fix to use after free issue
+
+Added to code changes to ref_cnt variable will decrement only
+when add_ref_hdr variable is true.
+
+Change-Id: I0bcc3909669f4843c43135e5f047ac28fa62bb63
+Acked-by: Ashok Vuyyuru <avuyyuru@qti.qualcomm.com>
+Signed-off-by: Mohammed Javid <mjavid@codeaurora.org>
+---
+ drivers/platform/msm/ipa/ipa_hdr.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/platform/msm/ipa/ipa_hdr.c b/drivers/platform/msm/ipa/ipa_hdr.c
+index 06bc6278..5f652d9 100644
+--- a/drivers/platform/msm/ipa/ipa_hdr.c
++++ b/drivers/platform/msm/ipa/ipa_hdr.c
+@@ -644,7 +644,8 @@ ipa_insert_failed:
+ 	list_del(&entry->link);
+ 	htbl->proc_ctx_cnt--;
+ bad_len:
+-	hdr_entry->ref_cnt--;
++	if (add_ref_hdr)
++		hdr_entry->ref_cnt--;
+ 	entry->cookie = 0;
+ 	kmem_cache_free(ipa_ctx->hdr_proc_ctx_cache, entry);
+ 	return -EPERM;
+-- 
+cgit v1.1
+

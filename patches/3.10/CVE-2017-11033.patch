@@ -1,0 +1,33 @@
+From c31ee5c0cea998aeb9d13d3d9cd2fb9a2a97ceee Mon Sep 17 00:00:00 2001
+From: Saranya Chidura <schidura@codeaurora.org>
+Date: Wed, 26 Jul 2017 17:37:17 +0530
+Subject: coresight: tmc: Fix the unbalanced lock in tmc_read()
+
+'commit 734aabed17090: ("coresight: tmc: Fix use after free issue
+with tmc read")' adds lock in tmc_read() to fix race condition seen in
+reading tmc buffer and enabling the device.But commit has unbalanced
+lock. This patch fixes the lock.
+
+Bug: 64453422
+Change-Id: Iaf3ecd83ef5af346725885ea2c84c4185f1a1c50
+Signed-off-by: Saranya Chidura <schidura@codeaurora.org>
+---
+ drivers/coresight/coresight-tmc.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/coresight/coresight-tmc.c b/drivers/coresight/coresight-tmc.c
+index 9d4b9b2..a15acd1 100644
+--- a/drivers/coresight/coresight-tmc.c
++++ b/drivers/coresight/coresight-tmc.c
+@@ -1576,7 +1576,7 @@ out:
+ 	dev_dbg(drvdata->dev, "%s: %zu bytes copied, %d bytes left\n",
+ 		__func__, len, (int) (drvdata->size - *ppos));
+ 
+-	mutex_lock(&drvdata->usb_lock);
++	mutex_unlock(&drvdata->usb_lock);
+ 	return len;
+ }
+ 
+-- 
+cgit v1.1
+
