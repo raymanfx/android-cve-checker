@@ -1,0 +1,102 @@
+From babbb1fc0e276e4fb989ef9246a63e55a2330b38 Mon Sep 17 00:00:00 2001
+From: Takashi Iwai <tiwai@suse.de>
+Date: Thu, 14 Jan 2016 17:01:46 +0100
+Subject: [PATCH] UPSTREAM: ALSA: timer: Code cleanup
+
+commit c3b1681375dc6e71d89a3ae00cc3ce9e775a8917 upstream.
+
+This is a minor code cleanup without any functional changes:
+- Kill keep_flag argument from _snd_timer_stop(), as all callers pass
+  only it false.
+- Remove redundant NULL check in _snd_timer_stop().
+
+Bug: 37240993
+Change-Id: Idc3778ca1cd62b8c22e2a57b3c1130fe7b3d13f6
+Signed-off-by: Takashi Iwai <tiwai@suse.de>
+Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
+Signed-off-by: Siqi Lin <siqilin@google.com>
+---
+ sound/core/timer.c | 28 +++++++++++-----------------
+ 1 file changed, 11 insertions(+), 17 deletions(-)
+
+diff --git a/sound/core/timer.c b/sound/core/timer.c
+index 539e8bdb5b6c5..ce151185c42af 100644
+--- a/sound/core/timer.c
++++ b/sound/core/timer.c
+@@ -304,8 +304,7 @@ int snd_timer_open(struct snd_timer_instance **ti,
+ 	return 0;
+ }
+ 
+-static int _snd_timer_stop(struct snd_timer_instance *timeri,
+-			   int keep_flag, int event);
++static int _snd_timer_stop(struct snd_timer_instance *timeri, int event);
+ 
+ /*
+  * close a timer instance
+@@ -347,7 +346,7 @@ int snd_timer_close(struct snd_timer_instance *timeri)
+ 		spin_unlock_irq(&timer->lock);
+ 		mutex_lock(&register_mutex);
+ 		list_del(&timeri->open_list);
+-		if (timer && list_empty(&timer->open_list_head) &&
++		if (list_empty(&timer->open_list_head) &&
+ 		    timer->hw.close)
+ 			timer->hw.close(timer);
+ 		/* remove slave links */
+@@ -492,8 +491,7 @@ int snd_timer_start(struct snd_timer_instance *timeri, unsigned int ticks)
+ 	return result;
+ }
+ 
+-static int _snd_timer_stop(struct snd_timer_instance * timeri,
+-			   int keep_flag, int event)
++static int _snd_timer_stop(struct snd_timer_instance *timeri, int event)
+ {
+ 	struct snd_timer *timer;
+ 	unsigned long flags;
+@@ -502,13 +500,11 @@ static int _snd_timer_stop(struct snd_timer_instance * timeri,
+ 		return -ENXIO;
+ 
+ 	if (timeri->flags & SNDRV_TIMER_IFLG_SLAVE) {
+-		if (!keep_flag) {
+-			spin_lock_irqsave(&slave_active_lock, flags);
+-			timeri->flags &= ~SNDRV_TIMER_IFLG_RUNNING;
+-			list_del_init(&timeri->ack_list);
+-			list_del_init(&timeri->active_list);
+-			spin_unlock_irqrestore(&slave_active_lock, flags);
+-		}
++		spin_lock_irqsave(&slave_active_lock, flags);
++		timeri->flags &= ~SNDRV_TIMER_IFLG_RUNNING;
++		list_del_init(&timeri->ack_list);
++		list_del_init(&timeri->active_list);
++		spin_unlock_irqrestore(&slave_active_lock, flags);
+ 		goto __end;
+ 	}
+ 	timer = timeri->timer;
+@@ -533,9 +529,7 @@ static int _snd_timer_stop(struct snd_timer_instance * timeri,
+ 			}
+ 		}
+ 	}
+-	if (!keep_flag)
+-		timeri->flags &=
+-			~(SNDRV_TIMER_IFLG_RUNNING | SNDRV_TIMER_IFLG_START);
++	timeri->flags &= ~(SNDRV_TIMER_IFLG_RUNNING | SNDRV_TIMER_IFLG_START);
+ 	spin_unlock_irqrestore(&timer->lock, flags);
+       __end:
+ 	if (event != SNDRV_TIMER_EVENT_RESOLUTION)
+@@ -554,7 +548,7 @@ int snd_timer_stop(struct snd_timer_instance *timeri)
+ 	unsigned long flags;
+ 	int err;
+ 
+-	err = _snd_timer_stop(timeri, 0, SNDRV_TIMER_EVENT_STOP);
++	err = _snd_timer_stop(timeri, SNDRV_TIMER_EVENT_STOP);
+ 	if (err < 0)
+ 		return err;
+ 	timer = timeri->timer;
+@@ -600,7 +594,7 @@ int snd_timer_continue(struct snd_timer_instance *timeri)
+  */
+ int snd_timer_pause(struct snd_timer_instance * timeri)
+ {
+-	return _snd_timer_stop(timeri, 0, SNDRV_TIMER_EVENT_PAUSE);
++	return _snd_timer_stop(timeri, SNDRV_TIMER_EVENT_PAUSE);
+ }
+ 
+ /*

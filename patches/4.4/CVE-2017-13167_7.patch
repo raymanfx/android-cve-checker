@@ -1,0 +1,45 @@
+From 41455882528a805e9a9e4f0ea887dc669c9ccb53 Mon Sep 17 00:00:00 2001
+From: Takashi Iwai <tiwai@suse.de>
+Date: Tue, 9 Feb 2016 12:02:32 +0100
+Subject: [PATCH] UPSTREAM: ALSA: timer: Fix race between stop and interrupt
+
+commit ed8b1d6d2c741ab26d60d499d7fbb7ac801f0f51 upstream.
+
+A slave timer element also unlinks at snd_timer_stop() but it takes
+only slave_active_lock.  When a slave is assigned to a master,
+however, this may become a race against the master's interrupt
+handling, eventually resulting in a list corruption.  The actual bug
+could be seen with a syzkaller fuzzer test case in BugLink below.
+
+As a fix, we need to take timeri->timer->lock when timer isn't NULL,
+i.e. assigned to a master, while the assignment to a master itself is
+protected by slave_active_lock.
+
+Bug: 37240993
+Change-Id: Ib6eae144d5fdc92546d2210bcd6bc56454ad3e42
+BugLink: http://lkml.kernel.org/r/CACT4Y+Y_Bm+7epAb=8Wi=AaWd+DYS7qawX52qxdCfOfY49vozQ@mail.gmail.com
+Signed-off-by: Takashi Iwai <tiwai@suse.de>
+Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
+Signed-off-by: Siqi Lin <siqilin@google.com>
+---
+ sound/core/timer.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/sound/core/timer.c b/sound/core/timer.c
+index 10312fe4cd06e..3b6f18cf2b835 100644
+--- a/sound/core/timer.c
++++ b/sound/core/timer.c
+@@ -517,9 +517,13 @@ static int _snd_timer_stop(struct snd_timer_instance *timeri, int event)
+ 			spin_unlock_irqrestore(&slave_active_lock, flags);
+ 			return -EBUSY;
+ 		}
++		if (timeri->timer)
++			spin_lock(&timeri->timer->lock);
+ 		timeri->flags &= ~SNDRV_TIMER_IFLG_RUNNING;
+ 		list_del_init(&timeri->ack_list);
+ 		list_del_init(&timeri->active_list);
++		if (timeri->timer)
++			spin_unlock(&timeri->timer->lock);
+ 		spin_unlock_irqrestore(&slave_active_lock, flags);
+ 		goto __end;
+ 	}

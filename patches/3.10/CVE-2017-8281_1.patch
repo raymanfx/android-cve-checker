@@ -1,0 +1,111 @@
+From 652f01eb8b5e24190c9ea0ca31e5fc7ff4150636 Mon Sep 17 00:00:00 2001
+From: Manoj Prabhu B <bmanoj@codeaurora.org>
+Date: Thu, 18 Feb 2016 14:15:04 +0530
+Subject: diag: dci: Add protection while de-initializing clients
+
+Currently, while de-initializing dci clients, there is
+a possibility to access stale entries. This patch fixes
+this issue by adding proper protection mechanism.
+CRs-Fixed: 961469
+
+Bug: 62378232
+Change-Id: I829c9497eeb356662a6531592c66108e615ce6e4
+Signed-off-by: Mohit Aggarwal <maggarwa@codeaurora.org>
+Signed-off-by: Manoj Prabhu B <bmanoj@codeaurora.org>
+---
+ drivers/char/diag/diag_dci.c      | 13 ++++++++-----
+ drivers/char/diag/diagchar_core.c | 20 ++++++++++++++++----
+ 2 files changed, 24 insertions(+), 9 deletions(-)
+
+diff --git a/drivers/char/diag/diag_dci.c b/drivers/char/diag/diag_dci.c
+index 80a4602..1532928 100644
+--- a/drivers/char/diag/diag_dci.c
++++ b/drivers/char/diag/diag_dci.c
+@@ -2970,14 +2970,15 @@ int diag_dci_deinit_client(struct diag_dci_client_tbl *entry)
+ 	if (!entry)
+ 		return DIAG_DCI_NOT_SUPPORTED;
+ 
+-	token = entry->client_info.token;
+-
+ 	mutex_lock(&driver->dci_mutex);
++
++	token = entry->client_info.token;
+ 	/*
+ 	 * Remove the entry from the list before freeing the buffers
+ 	 * to ensure that we don't have any invalid access.
+ 	 */
+-	list_del(&entry->track);
++	if (!list_empty(&entry->track))
++		list_del(&entry->track);
+ 	driver->num_dci_client--;
+ 	/*
+ 	 * Clear the client's log and event masks, update the cumulative
+@@ -3006,7 +3007,8 @@ int diag_dci_deinit_client(struct diag_dci_client_tbl *entry)
+ 		req_entry = list_entry(start, struct dci_pkt_req_entry_t,
+ 				       track);
+ 		if (req_entry->client_id == entry->client_info.client_id) {
+-			list_del(&req_entry->track);
++			if (!list_empty(&req_entry->track))
++				list_del(&req_entry->track);
+ 			kfree(req_entry);
+ 		}
+ 	}
+@@ -3015,7 +3017,8 @@ int diag_dci_deinit_client(struct diag_dci_client_tbl *entry)
+ 	mutex_lock(&entry->write_buf_mutex);
+ 	list_for_each_entry_safe(buf_entry, temp, &entry->list_write_buf,
+ 							buf_track) {
+-		list_del(&buf_entry->buf_track);
++		if (!list_empty(&buf_entry->buf_track))
++			list_del(&buf_entry->buf_track);
+ 		if (buf_entry->buf_type == DCI_BUF_SECONDARY) {
+ 			mutex_lock(&buf_entry->data_mutex);
+ 			diagmem_free(driver, buf_entry->data, POOL_TYPE_DCI);
+diff --git a/drivers/char/diag/diagchar_core.c b/drivers/char/diag/diagchar_core.c
+index d510af4..2d9f1015 100644
+--- a/drivers/char/diag/diagchar_core.c
++++ b/drivers/char/diag/diagchar_core.c
+@@ -1250,12 +1250,18 @@ long diagchar_compat_ioctl(struct file *filp,
+ 		result = diag_ioctl_dci_reg(ioarg);
+ 		break;
+ 	case DIAG_IOCTL_DCI_DEINIT:
++		mutex_lock(&driver->dci_mutex);
+ 		if (copy_from_user((void *)&client_id, (void __user *)ioarg,
+-			sizeof(int)))
++			sizeof(int))) {
++			mutex_unlock(&driver->dci_mutex);
+ 			return -EFAULT;
++		}
+ 		dci_client = diag_dci_get_client_entry(client_id);
+-		if (!dci_client)
++		if (!dci_client) {
++			mutex_unlock(&driver->dci_mutex);
+ 			return DIAG_DCI_NOT_SUPPORTED;
++		}
++		mutex_unlock(&driver->dci_mutex);
+ 		result = diag_dci_deinit_client(dci_client);
+ 		break;
+ 	case DIAG_IOCTL_DCI_SUPPORT:
+@@ -1347,12 +1353,18 @@ long diagchar_ioctl(struct file *filp,
+ 		result = diag_ioctl_dci_reg(ioarg);
+ 		break;
+ 	case DIAG_IOCTL_DCI_DEINIT:
++		mutex_lock(&driver->dci_mutex);
+ 		if (copy_from_user((void *)&client_id, (void __user *)ioarg,
+-			sizeof(int)))
++			sizeof(int))) {
++			mutex_unlock(&driver->dci_mutex);
+ 			return -EFAULT;
++		}
+ 		dci_client = diag_dci_get_client_entry(client_id);
+-		if (!dci_client)
++		if (!dci_client) {
++			mutex_unlock(&driver->dci_mutex);
+ 			return DIAG_DCI_NOT_SUPPORTED;
++		}
++		mutex_unlock(&driver->dci_mutex);
+ 		result = diag_dci_deinit_client(dci_client);
+ 		break;
+ 	case DIAG_IOCTL_DCI_SUPPORT:
+-- 
+cgit v1.1
+

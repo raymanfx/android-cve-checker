@@ -1,0 +1,32 @@
+From 4c7961ac8bd9dc93921fa6eb06100279ace7b4f9 Mon Sep 17 00:00:00 2001
+From: Al Viro <viro@zeniv.linux.org.uk>
+Date: Fri, 19 Dec 2014 06:20:58 +0000
+Subject: [PATCH] Bluetooth: cmtp: cmtp_add_connection() should verify that
+ it's dealing with l2cap socket
+
+... rather than relying on ciptool(8) never passing it anything else.  Give
+it e.g. an AF_UNIX connected socket (from socketpair(2)) and it'll oops,
+trying to evaluate &l2cap_pi(sock->sk)->chan->dst...
+
+Bug: 33982955
+Signed-off-by: Al Viro <viro@zeniv.linux.org.uk>
+Signed-off-by: Marcel Holtmann <marcel@holtmann.org>
+Change-Id: I078260c1b5be6a96b54c265da0236bf84842e450
+---
+ net/bluetooth/cmtp/core.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/net/bluetooth/cmtp/core.c b/net/bluetooth/cmtp/core.c
+index e0a6ebf2baa6f..84460f623fc8c 100644
+--- a/net/bluetooth/cmtp/core.c
++++ b/net/bluetooth/cmtp/core.c
+@@ -334,6 +334,9 @@ int cmtp_add_connection(struct cmtp_connadd_req *req, struct socket *sock)
+ 
+ 	BT_DBG("");
+ 
++	if (!l2cap_is_socket(sock))
++		return -EBADFD;
++
+ 	session = kzalloc(sizeof(struct cmtp_session), GFP_KERNEL);
+ 	if (!session)
+ 		return -ENOMEM;
